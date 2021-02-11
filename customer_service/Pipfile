@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 celery = "*"
 sqlalchemy = "*"
+psycopg2-binary = "*"
 
 [dev-packages]
 

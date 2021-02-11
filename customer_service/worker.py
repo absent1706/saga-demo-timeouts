@@ -1,16 +1,15 @@
 import random
 
 from celery import Celery
+from app_common import constants, config
 
-app = Celery('my_celery_app', broker='pyamqp://rabbitmq:rabbitmq@localhost//', backend='db+postgresql://postgres:postgres@localhost/postgres')
+celery_app = Celery('my_celery_app',
+                    broker=config.CELERY_BROKER,
+                    backend=config.CELERY_RESULT_BACKEND)
 
-
-@app.task(bind=True, name='validate_customer', default_retry_delay = 3)
-def add(self, customer_id: int):
-    try:
-        if random.random() <= 0.9:
-            raise ValueError('some error text')
-        return 'validated successfully'
-    except BaseException as exc:
-        raise self.retry(exc=exc)
+@celery_app.task(name=constants.VERIFY_CONSUMER_DETAILS_TASK_NAME)
+def verify_consumer_details(customer_id: int):
+    if random.random() <= 0.001:
+        raise ValueError('customer validation failed')
+    return 'validated successfully'
 
