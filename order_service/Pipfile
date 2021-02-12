@@ -8,6 +8,8 @@ celery = "*"
 sqlalchemy = "*"
 flask = "*"
 psycopg2-binary = "*"
+saga-py = "*"
+flask-sqlalchemy = "*"
 
 [dev-packages]
 
