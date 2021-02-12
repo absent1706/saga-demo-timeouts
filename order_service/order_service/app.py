@@ -1,90 +1,124 @@
 import enum
-import random
 import logging
 import os
+import random
 
-from saga import SagaBuilder
 from celery import Celery
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from saga import SagaBuilder
+from sqlalchemy_mixins import AllFeaturesMixin
 
-from app_common import constants, config
+from app_common import constants, settings
 
 logging.basicConfig(level=logging.DEBUG)
 
 celery_app = Celery('my_celery_app',
-                    broker=config.CELERY_BROKER,
-                    backend=config.CELERY_RESULT_BACKEND)
+                    broker=settings.CELERY_BROKER,
+                    backend=settings.CELERY_RESULT_BACKEND)
 
 app = Flask(__name__)
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{current_dir}/order_service.db"
+app.config[
+    'SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{current_dir}/order_service.db"
 
-db = SQLAlchemy(app)
+db = SQLAlchemy(app, session_options={'autocommit': True})
 
 
 class OrderStatuses(enum.Enum):
-    NEW = 'new'
-    CREATED = 'created'
-    FAILED = 'failed'
+    PENDING_VALIDATION = 'pending_validation'
+    APPROVED = 'approved'
+    REJECTED = 'rejected'
 
 
-class OrderSagaStatuses(enum.Enum):
-    ORDER_CREATED = 'order_created'
-    CREATED = 'created'
-    FAILED = 'failed'
+class CreateOrderSagaStatuses(enum.Enum):
+    ORDER_CREATED = 'ORDER_CREATED'
+    VERIFYING_CONSUMER_DETAILS = 'VERIFYING_CONSUMER_DETAILS'
+    SUCCEEDED = 'SUCCEEDED'
+    FAILED = 'FAILED'
 
 
-class Order(db.Model):
+class BaseModel(db.Model, AllFeaturesMixin):
+    __abstract__ = True
+    pass
+
+
+class Order(BaseModel):
     id = db.Column(db.Integer, primary_key=True)
-    status = db.Column(db.Enum(OrderStatuses))
-    customer_id = db.Column(db.Integer)
+    status = db.Column(db.Enum(OrderStatuses),
+                       default=OrderStatuses.PENDING_VALIDATION)
+    consumer_id = db.Column(db.Integer)
 
 
-class OrderSagaState(db.Model):
+class CreateOrderSagaState(BaseModel):
     id = db.Column(db.Integer, primary_key=True)
-    status = db.Column(db.Enum(OrderStatuses))
-    customer_id = db.Column(db.Integer)
+    status = db.Column(db.Enum(CreateOrderSagaStatuses),
+                       default=CreateOrderSagaStatuses.ORDER_CREATED)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
 
+
+BaseModel.set_session(db.session)
 db.create_all()  # "run migrations"
 
 
 @app.route('/create-order/timeout')
 def create_order():
+    order = Order.create(consumer_id=random.randint(1, 100))
 
-    db.session.add(Order(status=OrderStatuses.NEW, customer_id=1))
-    db.session.commit()
+    CreateOrderSaga(order).execute()
     return 'ok'
-    # result = celery_app.send_task(constants.VERIFY_CONSUMER_DETAILS_TASK_NAME,
-    #                               [random.randint(1, 100)])
-    # logging.info(f'created task {result}. waiting for result ...')
-    # return result.get(propagate=False)
 
 
 class CreateOrderSaga:
-    def __init__(self):
-        # let's say staff goes and manually approves that they're able to prepare desired dishes
-        # only authorize after restaurant approves order
-        # mark order as approved in Order service
+    NO_ACTION = lambda *args: None
+
+    def __init__(self, order):
         self.saga = SagaBuilder.create() \
-                .action(lambda _: _, self.reject_order) \
-                .action(self.consumer_verify_consumer_details, lambda _: _) \
-                .action(self.restaurant_create_order, self.restaurant_reject_order) \
-                .action(self.accounting_authorize_card, lambda _: _) \
-                .action(self.approve_order, lambda _: _) \
+            .action(self.NO_ACTION, self.reject_order) \
+            .action(self.verify_consumer_details, self.NO_ACTION) \
+            .action(self.approve_order, self.NO_ACTION) \
             .build()
+        # .action(self.restaurant_create_order, self.restaurant_reject_order) \
+        # .action(self.accounting_authorize_card, lambda _: _) \
+        # .action(self.approve_order, lambda _: _) \
 
+        self.order = order
 
-    def create_order(self):
-        pass
+        self.saga_state = CreateOrderSagaState.create(order_id=order.id)
+
+    def execute(self):
+        return self.saga.execute()
+        #
+        # except SagaError as e:
+        #     print('saga error: ', e)  # wraps the BaseException('some error happened')
+        #
+
+    def verify_consumer_details(self):
+        task_result = celery_app.send_task(
+            constants.VERIFY_CONSUMER_DETAILS_TASK_NAME,
+            args=[self.order.consumer_id],
+            queue=constants.CONSUMER_SERVICE_COMMANDS_QUEUE)
+        logging.info('verify consumer command sent')
+
+        self.saga_state.update(
+            status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS)
+
+        response = task_result.get()
+        logging.info(f'Response from customer service: {response}')
 
     def reject_order(self):
-        pass
-    #
-    # except SagaError as e:
-    #     print('saga error: ', e)  # wraps the BaseException('some error happened')
-    #
+        self.order.update(status=OrderStatuses.REJECTED)
+        self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
 
-if __name__  == '__main__':
+        logging.info(f'Compensation: order {self.order.id} rejected')
+
+    def approve_order(self):
+        self.order.update(status=OrderStatuses.APPROVED)
+        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED)
+
+        logging.info(f'Order {self.order.id} approved')
+
+
+if __name__ == '__main__':
     result = create_order()

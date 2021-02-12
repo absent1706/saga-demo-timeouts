@@ -1,15 +1,21 @@
-import random
+import logging
 
 from celery import Celery
-from app_common import constants, config
 
-celery_app = Celery('my_celery_app',
-                    broker=config.CELERY_BROKER,
-                    backend=config.CELERY_RESULT_BACKEND)
+from app_common import constants, settings
 
-@celery_app.task(name=constants.VERIFY_CONSUMER_DETAILS_TASK_NAME)
+logging.basicConfig(level=logging.DEBUG)
+
+command_handlers_celery_app = Celery(
+    'consumer_command_handlers',
+    broker=settings.CELERY_BROKER,
+    backend=settings.CELERY_RESULT_BACKEND)
+command_handlers_celery_app.conf.task_default_queue = constants.CONSUMER_SERVICE_COMMANDS_QUEUE
+
+
+@command_handlers_celery_app.task(
+    name=constants.VERIFY_CONSUMER_DETAILS_TASK_NAME)
 def verify_consumer_details(customer_id: int):
-    if random.random() <= 0.001:
+    if customer_id < 50:
         raise ValueError('customer validation failed')
     return 'validated successfully'
-
