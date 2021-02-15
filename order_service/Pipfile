@@ -11,6 +11,8 @@ psycopg2-binary = "*"
 saga-py = "*"
 flask-sqlalchemy = "*"
 sqlalchemy-mixins = "*"
+requests = "*"
+asyncapi = {extras = ["docs", "http", "redis", "subscriber", "yaml"], version = "*"}
 
 [dev-packages]
 
