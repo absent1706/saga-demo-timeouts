@@ -2,6 +2,7 @@ import enum
 import logging
 import os
 import random
+from dataclasses import asdict
 
 from celery import Celery
 from flask import Flask
@@ -10,6 +11,9 @@ from saga import SagaBuilder
 from sqlalchemy_mixins import AllFeaturesMixin
 
 from app_common import constants, settings
+from order_service.app_common.messaging.consumer_service_messaging import \
+    verify_consumer_details_message
+from order_service.app_common.messaging import consumer_service_messaging
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -66,6 +70,7 @@ db.create_all()  # "run migrations"
 def create_order():
     order = Order.create(consumer_id=random.randint(1, 100))
 
+    # TODO: execute in a separate Celery task
     CreateOrderSaga(order).execute()
     return 'ok'
 
@@ -96,13 +101,14 @@ class CreateOrderSaga:
 
     def verify_consumer_details(self):
         task_result = celery_app.send_task(
-            constants.VERIFY_CONSUMER_DETAILS_TASK_NAME,
-            args=[self.order.consumer_id],
-            queue=constants.CONSUMER_SERVICE_COMMANDS_QUEUE)
+            verify_consumer_details_message.TASK_NAME,
+            args=[asdict(
+                verify_consumer_details_message.Payload(consumer_id=self.order.consumer_id)
+            )],
+            queue=consumer_service_messaging.COMMANDS_QUEUE)
         logging.info('verify consumer command sent')
 
-        self.saga_state.update(
-            status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS)
+        self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS)
 
         response = task_result.get()
         logging.info(f'Response from customer service: {response}')

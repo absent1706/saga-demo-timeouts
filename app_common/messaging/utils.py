@@ -3,7 +3,7 @@ import asyncapi
 
 def message_to_channel(message: asyncapi.Message, description: str = None):
     return message.name, asyncapi.Channel(
-        description=None,
+        description=description,
         subscribe=asyncapi.Operation(
             message=message,
         )

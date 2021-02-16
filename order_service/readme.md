@@ -1,5 +1,16 @@
+# Setup
+```
+pipenv install
+pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
+```
+
 # Run
 ```
-FLASK_DEBUG=1 FLASK_APP=app.py pipenv run flask run
+PYTHONPATH=. FLASK_DEBUG=1 FLASK_APP=order_service/app.py pipenv run flask run
 
+```
+
+or simply 
+```
+PYTHONPATH=. python order_service/app.py
 ```
