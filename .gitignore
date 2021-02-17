@@ -1,4 +1,4 @@
 .idea/
 Pipfile.lock
-*.db
+*.sqlite
 venv/

@@ -25,7 +25,7 @@ app = Flask(__name__)
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
 app.config[
-    'SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{current_dir}/order_service.db"
+    'SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{current_dir}/order_service.sqlite"
 
 db = SQLAlchemy(app, session_options={'autocommit': True})
 
