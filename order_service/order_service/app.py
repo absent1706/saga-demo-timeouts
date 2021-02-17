@@ -66,6 +66,7 @@ class CreateOrderSagaState(BaseModel):
     status = db.Column(db.Enum(CreateOrderSagaStatuses),
                        default=CreateOrderSagaStatuses.ORDER_CREATED)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
+    message_id = db.Column(db.String)
 
 
 BaseModel.set_session(db.session)
@@ -121,7 +122,8 @@ class CreateOrderSaga:
             queue=consumer_service_messaging.COMMANDS_QUEUE)
         logging.info('verify consumer command sent')
 
-        self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS)
+        self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
+                               message_id=task_result.id)
 
         # It's safe to assume success case.
         # In case task handler throws exception,
@@ -146,7 +148,8 @@ class CreateOrderSaga:
             queue=accounting_service_messaging.COMMANDS_QUEUE)
         logging.info('authorize card command sent')
 
-        self.saga_state.update(status=CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD)
+        self.saga_state.update(status=CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD,
+                               message_id=task_result.id)
 
         # It's safe to assume success case.
         # In case task handler throws exception,
@@ -157,7 +160,7 @@ class CreateOrderSaga:
 
     def approve_order(self):
         self.order.update(status=OrderStatuses.APPROVED)
-        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED)
+        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED, message_id=None)
 
         logging.info(f'Order {self.order.id} approved')
 
