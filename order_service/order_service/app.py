@@ -11,9 +11,12 @@ from saga import SagaBuilder
 from sqlalchemy_mixins import AllFeaturesMixin
 
 from app_common import constants, settings
+from order_service.app_common.messaging.accounting_service_messaging import \
+    authorize_card_message
 from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
-from order_service.app_common.messaging import consumer_service_messaging
+from order_service.app_common.messaging import consumer_service_messaging, \
+    accounting_service_messaging
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -39,6 +42,7 @@ class OrderStatuses(enum.Enum):
 class CreateOrderSagaStatuses(enum.Enum):
     ORDER_CREATED = 'ORDER_CREATED'
     VERIFYING_CONSUMER_DETAILS = 'VERIFYING_CONSUMER_DETAILS'
+    AUTHORIZING_CREDIT_CARD = 'AUTHORIZING_CREDIT_CARD'
     SUCCEEDED = 'SUCCEEDED'
     FAILED = 'FAILED'
 
@@ -53,6 +57,8 @@ class Order(BaseModel):
     status = db.Column(db.Enum(OrderStatuses),
                        default=OrderStatuses.PENDING_VALIDATION)
     consumer_id = db.Column(db.Integer)
+    card_id = db.Column(db.Integer)
+    price = db.Column(db.Integer)
 
 
 class CreateOrderSagaState(BaseModel):
@@ -68,7 +74,13 @@ db.create_all()  # "run migrations"
 
 @app.route('/create-order/timeout')
 def create_order():
-    order = Order.create(consumer_id=random.randint(1, 100))
+    input_data = dict(
+        consumer_id=random.randint(1, 100),
+        price=random.randint(10, 100),
+        card_id=random.randint(1, 5)
+    )
+
+    order = Order.create(**input_data)
 
     # TODO: execute in a separate Celery task
     CreateOrderSaga(order).execute()
@@ -82,6 +94,7 @@ class CreateOrderSaga:
         self.saga = SagaBuilder.create() \
             .action(self.NO_ACTION, self.reject_order) \
             .action(self.verify_consumer_details, self.NO_ACTION) \
+            .action(self.authorize_card, self.NO_ACTION) \
             .action(self.approve_order, self.NO_ACTION) \
             .build()
         # .action(self.restaurant_create_order, self.restaurant_reject_order) \
@@ -110,6 +123,10 @@ class CreateOrderSaga:
 
         self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS)
 
+        # It's safe to assume success case.
+        # In case task handler throws exception,
+        #   Celery automatically raises exception here by itself
+        #   and saga library automatically launches compensations
         response = task_result.get()
         logging.info(f'Response from customer service: {response}')
 
@@ -118,6 +135,25 @@ class CreateOrderSaga:
         self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
 
         logging.info(f'Compensation: order {self.order.id} rejected')
+
+    def authorize_card(self):
+        task_result = celery_app.send_task(
+            authorize_card_message.TASK_NAME,
+            args=[asdict(
+                authorize_card_message.Payload(card_id=self.order.card_id,
+                                               amount=self.order.price)
+            )],
+            queue=accounting_service_messaging.COMMANDS_QUEUE)
+        logging.info('authorize card command sent')
+
+        self.saga_state.update(status=CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD)
+
+        # It's safe to assume success case.
+        # In case task handler throws exception,
+        #   Celery automatically raises exception here by itself,
+        #   and saga library automatically launches compensations
+        response = authorize_card_message.Response(**task_result.get())
+        logging.info(f'Card authorized. Transaction ID: {response.transaction_id}')
 
     def approve_order(self):
         self.order.update(status=OrderStatuses.APPROVED)
