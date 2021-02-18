@@ -2,21 +2,26 @@ import enum
 import logging
 import os
 import random
+import traceback
+
+import mimesis  # for fake data generation
 from dataclasses import asdict
 
 from celery import Celery
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from saga import SagaBuilder
+from saga import SagaBuilder, SagaError
 from sqlalchemy_mixins import AllFeaturesMixin
 
-from app_common import constants, settings
+from app_common import settings
 from order_service.app_common.messaging.accounting_service_messaging import \
     authorize_card_message
 from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from order_service.app_common.messaging import consumer_service_messaging, \
-    accounting_service_messaging
+    accounting_service_messaging, restaurant_service_messaging
+from order_service.app_common.messaging.restaurant_service_messaging import \
+    create_ticket_message
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -42,6 +47,7 @@ class OrderStatuses(enum.Enum):
 class CreateOrderSagaStatuses(enum.Enum):
     ORDER_CREATED = 'ORDER_CREATED'
     VERIFYING_CONSUMER_DETAILS = 'VERIFYING_CONSUMER_DETAILS'
+    CREATING_RESTAURANT_TICKET = 'CREATING_RESTAURANT_TICKET'
     AUTHORIZING_CREDIT_CARD = 'AUTHORIZING_CREDIT_CARD'
     SUCCEEDED = 'SUCCEEDED'
     FAILED = 'FAILED'
@@ -59,6 +65,18 @@ class Order(BaseModel):
     consumer_id = db.Column(db.Integer)
     card_id = db.Column(db.Integer)
     price = db.Column(db.Integer)
+
+    items = db.relationship("OrderItem", backref="order")
+
+    transaction_id = db.Column(db.String)
+    restaurant_ticket_id = db.Column(db.Integer)
+
+
+class OrderItem(BaseModel):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
+    name = db.Column(db.String)
+    quantity = db.Column(db.Integer)
 
 
 class CreateOrderSagaState(BaseModel):
@@ -78,7 +96,17 @@ def create_order():
     input_data = dict(
         consumer_id=random.randint(1, 100),
         price=random.randint(10, 100),
-        card_id=random.randint(1, 5)
+        card_id=random.randint(1, 5),
+        items=[
+            OrderItem(
+               name=mimesis.Food().dish(),  # some fake dish name
+               quantity=random.randint(1, 5)
+            ),
+            OrderItem(
+                name=mimesis.Food().dish(),  # some fake dish name
+                quantity=random.randint(1, 5)
+            )
+        ]
     )
 
     order = Order.create(**input_data)
@@ -95,6 +123,7 @@ class CreateOrderSaga:
         self.saga = SagaBuilder.create() \
             .action(self.NO_ACTION, self.reject_order) \
             .action(self.verify_consumer_details, self.NO_ACTION) \
+            .action(self.create_restaurant_ticket, self.reject_restaurant_ticket) \
             .action(self.authorize_card, self.NO_ACTION) \
             .action(self.approve_order, self.NO_ACTION) \
             .build()
@@ -107,11 +136,13 @@ class CreateOrderSaga:
         self.saga_state = CreateOrderSagaState.create(order_id=order.id)
 
     def execute(self):
-        return self.saga.execute()
-        #
-        # except SagaError as e:
-        #     print('saga error: ', e)  # wraps the BaseException('some error happened')
-        #
+        try:
+            result = self.saga.execute()
+            return result
+        except SagaError as e:
+            print('Error occured with error: ', e, '\n', traceback.format_exc())
+            print('Closing saga')
+            # in real world, we would log this event somewhere
 
     def verify_consumer_details(self):
         task_result = celery_app.send_task(
@@ -138,6 +169,40 @@ class CreateOrderSaga:
 
         logging.info(f'Compensation: order {self.order.id} rejected')
 
+    def create_restaurant_ticket(self):
+        task_result = celery_app.send_task(
+            create_ticket_message.TASK_NAME,
+            args=[asdict(
+                create_ticket_message.Payload(
+                    order_id=self.order.id,
+                    customer_id=self.order.consumer_id,
+                    items=[
+                        create_ticket_message.OrderItem(
+                            name=item.name,
+                            quantity=item.quantity
+                        )
+                        for item in self.order.items
+                    ]
+                )
+            )],
+            queue=restaurant_service_messaging.COMMANDS_QUEUE)
+        logging.info('create restaurant ticket command sent')
+
+        self.saga_state.update(status=CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
+                               message_id=task_result.id)
+
+        # It's safe to assume success case.
+        # In case task handler throws exception,
+        #   Celery automatically raises exception here by itself,
+        #   and saga library automatically launches compensations
+        response = create_ticket_message.Response(**task_result.get())
+        logging.info(f'Restaurant ticket # {response.ticket_id} created')
+        self.order.update(restaurant_ticket_id=response.ticket_id)
+
+    def reject_restaurant_ticket(self):
+        # TODO
+        logging.info(f'Compensation: restaurant ticket # {self.order.restaurant_ticket_id} rejected')
+
     def authorize_card(self):
         task_result = celery_app.send_task(
             authorize_card_message.TASK_NAME,
@@ -157,6 +222,7 @@ class CreateOrderSaga:
         #   and saga library automatically launches compensations
         response = authorize_card_message.Response(**task_result.get())
         logging.info(f'Card authorized. Transaction ID: {response.transaction_id}')
+        self.order.update(transaction_id=response.transaction_id)
 
     def approve_order(self):
         self.order.update(status=OrderStatuses.APPROVED)

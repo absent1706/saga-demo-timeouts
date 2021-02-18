@@ -23,7 +23,7 @@ def authorize_card_task(payload: dict):
     payload = authorize_card_message.Payload(**payload)
 
     if payload.amount > 50:
-        raise ValueError('Card autorization failed. Insiffucient balance')
+        raise ValueError('Card authorization failed. Insiffucient balance')
 
     # in real app, we would create here DB record with order ID and transaction ID
 
