@@ -21,7 +21,7 @@ from order_service.app_common.messaging.consumer_service_messaging import \
 from order_service.app_common.messaging import consumer_service_messaging, \
     accounting_service_messaging, restaurant_service_messaging
 from order_service.app_common.messaging.restaurant_service_messaging import \
-    create_ticket_message
+    create_ticket_message, reject_ticket_message
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -50,6 +50,8 @@ class CreateOrderSagaStatuses(enum.Enum):
     CREATING_RESTAURANT_TICKET = 'CREATING_RESTAURANT_TICKET'
     AUTHORIZING_CREDIT_CARD = 'AUTHORIZING_CREDIT_CARD'
     SUCCEEDED = 'SUCCEEDED'
+
+    REJECTING_RESTAURANT_TICKET = 'REJECTING_RESTAURANT_TICKET'
     FAILED = 'FAILED'
 
 
@@ -84,7 +86,7 @@ class CreateOrderSagaState(BaseModel):
     status = db.Column(db.Enum(CreateOrderSagaStatuses),
                        default=CreateOrderSagaStatuses.ORDER_CREATED)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
-    message_id = db.Column(db.String)
+    last_message_id = db.Column(db.String)
 
 
 BaseModel.set_session(db.session)
@@ -140,9 +142,19 @@ class CreateOrderSaga:
             result = self.saga.execute()
             return result
         except SagaError as e:
-            print('Error occured with error: ', e, '\n', traceback.format_exc())
-            print('Closing saga')
-            # in real world, we would log this event somewhere
+            logging.error(f'Saga error occured: {e} \n')
+            if e.compensations:
+                logging.error(f'Also, errors occured in some compensations: \n')
+                for compensation_exception in e.compensations:
+                    logging.error(f'{compensation_exception} \n ----- \n')
+
+            logging.error(f'Full exception trace: \n'
+                          f'===========\n'
+                          f'{traceback.format_exc()}\n'
+                          f'===========\n')
+            logging.error('Closing saga')
+
+            # in real world, we would also report this error somewhere
 
     def verify_consumer_details(self):
         task_result = celery_app.send_task(
@@ -151,17 +163,16 @@ class CreateOrderSaga:
                 verify_consumer_details_message.Payload(consumer_id=self.order.consumer_id)
             )],
             queue=consumer_service_messaging.COMMANDS_QUEUE)
-        logging.info('verify consumer command sent')
+        logging.info(f'Verify consumer command sent (consumer id = {self.order.consumer_id})')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
-                               message_id=task_result.id)
+                               last_message_id=task_result.id)
 
         # It's safe to assume success case.
         # In case task handler throws exception,
         #   Celery automatically raises exception here by itself
         #   and saga library automatically launches compensations
-        response = task_result.get()
-        logging.info(f'Response from customer service: {response}')
+        task_result.get()
 
     def reject_order(self):
         self.order.update(status=OrderStatuses.REJECTED)
@@ -186,10 +197,10 @@ class CreateOrderSaga:
                 )
             )],
             queue=restaurant_service_messaging.COMMANDS_QUEUE)
-        logging.info('create restaurant ticket command sent')
+        logging.info('Create restaurant ticket command sent')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
-                               message_id=task_result.id)
+                               last_message_id=task_result.id)
 
         # It's safe to assume success case.
         # In case task handler throws exception,
@@ -200,8 +211,21 @@ class CreateOrderSaga:
         self.order.update(restaurant_ticket_id=response.ticket_id)
 
     def reject_restaurant_ticket(self):
-        # TODO
-        logging.info(f'Compensation: restaurant ticket # {self.order.restaurant_ticket_id} rejected')
+        task_result = celery_app.send_task(
+            reject_ticket_message.TASK_NAME,
+            args=[asdict(
+                reject_ticket_message.Payload(
+                    ticket_id=self.order.restaurant_ticket_id
+                )
+            )],
+            queue=restaurant_service_messaging.COMMANDS_QUEUE)
+        logging.info(f'Compensation: rejecting restaurant ticket #{self.order.restaurant_ticket_id}')
+
+        self.saga_state.update(status=CreateOrderSagaStatuses.REJECTING_RESTAURANT_TICKET,
+                               last_message_id=task_result.id)
+
+        task_result.get()
+        logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} rejected')
 
     def authorize_card(self):
         task_result = celery_app.send_task(
@@ -211,10 +235,10 @@ class CreateOrderSaga:
                                                amount=self.order.price)
             )],
             queue=accounting_service_messaging.COMMANDS_QUEUE)
-        logging.info('authorize card command sent')
+        logging.info(f'Authorize card command sent (amount={self.order.price})')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD,
-                               message_id=task_result.id)
+                               last_message_id=task_result.id)
 
         # It's safe to assume success case.
         # In case task handler throws exception,
@@ -226,7 +250,7 @@ class CreateOrderSaga:
 
     def approve_order(self):
         self.order.update(status=OrderStatuses.APPROVED)
-        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED, message_id=None)
+        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED, last_message_id=None)
 
         logging.info(f'Order {self.order.id} approved')
 

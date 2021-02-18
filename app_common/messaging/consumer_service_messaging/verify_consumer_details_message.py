@@ -14,6 +14,8 @@ class Payload:
 message = asyncapi.Message(
     name=TASK_NAME,
     title='Verify consumer details',
-    summary='This command makes consumer service verify consumer details',
+    summary='This command makes consumer service verify consumer details.'
+            'If consumer is correct, it returns nothing.'
+            'If validation fails, it throws an exception',
     payload=Payload,
 )

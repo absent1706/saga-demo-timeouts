@@ -11,7 +11,7 @@ PYTHONPATH=. pipenv run celery -A restaurant_service.worker worker --loglevel=IN
 
 # Run API docs server 
 ```
-PYTHONPATH=. asyncapi-docs --api-module restaurant_service.asyncapi_specification
+PYTHONPATH=. pipenv run asyncapi-docs --api-module restaurant_service.asyncapi_specification
 
 curl http://127.0.0.1:5000/asyncapi.yaml
 ```

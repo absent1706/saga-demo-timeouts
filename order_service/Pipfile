@@ -13,6 +13,7 @@ flask-sqlalchemy = "*"
 sqlalchemy-mixins = "*"
 requests = "*"
 asyncapi = {extras = ["docs", "http", "redis", "subscriber", "yaml"], version = "*"}
+python-log-indenter = "*"
 
 [dev-packages]
 

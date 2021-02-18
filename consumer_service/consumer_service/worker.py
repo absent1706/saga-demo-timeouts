@@ -21,5 +21,6 @@ def verify_consumer_details_task(payload: dict):
     payload = verify_consumer_details_message.Payload(**payload)
 
     if payload.consumer_id < 50:
-        raise ValueError('customer validation failed')
-    return 'validated successfully'
+        raise ValueError(f'Consumer has incorrect id = {payload.consumer_id}')
+
+    return None
