@@ -14,3 +14,11 @@ or simply
 ```
 PYTHONPATH=. python order_service/app.py
 ```
+
+
+# Run API docs server 
+```
+PYTHONPATH=. asyncapi-docs --api-module order_service.asyncapi_specification
+
+curl http://127.0.0.1:5000/asyncapi.yaml
+```
