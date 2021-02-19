@@ -21,7 +21,7 @@ from order_service.app_common.messaging.consumer_service_messaging import \
 from order_service.app_common.messaging import consumer_service_messaging, \
     accounting_service_messaging, restaurant_service_messaging
 from order_service.app_common.messaging.restaurant_service_messaging import \
-    create_ticket_message, reject_ticket_message
+    create_ticket_message, reject_ticket_message, approve_ticket_message
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -48,6 +48,7 @@ class CreateOrderSagaStatuses(enum.Enum):
     ORDER_CREATED = 'ORDER_CREATED'
     VERIFYING_CONSUMER_DETAILS = 'VERIFYING_CONSUMER_DETAILS'
     CREATING_RESTAURANT_TICKET = 'CREATING_RESTAURANT_TICKET'
+    APPROVING_RESTAURANT_TICKET = 'APPROVING_RESTAURANT_TICKET'
     AUTHORIZING_CREDIT_CARD = 'AUTHORIZING_CREDIT_CARD'
     SUCCEEDED = 'SUCCEEDED'
 
@@ -127,6 +128,7 @@ class CreateOrderSaga:
             .action(self.verify_consumer_details, self.NO_ACTION) \
             .action(self.create_restaurant_ticket, self.reject_restaurant_ticket) \
             .action(self.authorize_card, self.NO_ACTION) \
+            .action(self.approve_restaurant_ticket, self.NO_ACTION) \
             .action(self.approve_order, self.NO_ACTION) \
             .build()
         # .action(self.restaurant_create_order, self.restaurant_reject_order) \
@@ -226,6 +228,23 @@ class CreateOrderSaga:
 
         task_result.get()
         logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} rejected')
+
+    def approve_restaurant_ticket(self):
+        task_result = celery_app.send_task(
+            approve_ticket_message.TASK_NAME,
+            args=[asdict(
+                approve_ticket_message.Payload(
+                    ticket_id=self.order.restaurant_ticket_id
+                )
+            )],
+            queue=restaurant_service_messaging.COMMANDS_QUEUE)
+        logging.info(f'Approving restaurant ticket #{self.order.restaurant_ticket_id}')
+
+        self.saga_state.update(status=CreateOrderSagaStatuses.APPROVING_RESTAURANT_TICKET,
+                               last_message_id=task_result.id)
+
+        task_result.get()
+        logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} approved')
 
     def authorize_card(self):
         task_result = celery_app.send_task(

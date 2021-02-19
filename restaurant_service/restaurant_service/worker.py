@@ -7,7 +7,7 @@ from celery import Celery
 from restaurant_service.app_common import settings
 from restaurant_service.app_common.messaging import restaurant_service_messaging
 from restaurant_service.app_common.messaging.restaurant_service_messaging import \
-    create_ticket_message, reject_ticket_message
+    create_ticket_message, reject_ticket_message, approve_ticket_message
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -25,7 +25,7 @@ def create_ticket_task(payload: dict):
     # in real world, we would create a ticket in restaurant service DB
     # here, we will just generate some fake ID of just created ticket
     ticket_id = random.randint(200, 300)
-    logging.info(f'Restaurant ticket f{ticket_id} created')
+    logging.info(f'Restaurant ticket {ticket_id} created')
 
     return asdict(create_ticket_message.Response(ticket_id=ticket_id))
 
@@ -36,5 +36,15 @@ def reject_ticket_task(payload: dict):
 
     # in real world, we would reject a ticket in restaurant service DB
     logging.info(f'Restaurant ticket {payload.ticket_id} rejected')
+
+    return None
+
+
+@command_handlers_celery_app.task(name=approve_ticket_message.TASK_NAME)
+def approve_ticket_task(payload: dict):
+    payload = approve_ticket_message.Payload(**payload)
+
+    # in real world, we would change ticket status to 'approved' in service DB
+    logging.info(f'Restaurant ticket {payload.ticket_id} approved')
 
     return None

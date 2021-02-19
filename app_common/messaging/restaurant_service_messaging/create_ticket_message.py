@@ -36,6 +36,6 @@ message = asyncapi.Message(
 
 response = asyncapi.Message(
     name=f'{TASK_NAME}.response',
-    title='Restaurant ticket ID',
+    title='Response is just created restaurant ticket ID',
     payload=Response,
 )
