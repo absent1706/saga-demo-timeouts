@@ -8,6 +8,7 @@ import mimesis  # for fake data generation
 from dataclasses import asdict
 
 from celery import Celery
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from saga import SagaBuilder, SagaError
@@ -121,6 +122,8 @@ def create_order():
 
 class CreateOrderSaga:
     NO_ACTION = lambda *args: None
+    TIMEOUT = 2  # wait for result for this amount of seconds,
+                 # then Celery will raise TimeoutError
 
     def __init__(self, order):
         self.saga = SagaBuilder.create() \
@@ -145,6 +148,8 @@ class CreateOrderSaga:
             return result
         except SagaError as e:
             logging.error(f'Saga error occured: {e} \n')
+            if isinstance(e.action, CeleryTimeoutError):
+                logging.error(f'Timeout happened\n')
             if e.compensations:
                 logging.error(f'Also, errors occured in some compensations: \n')
                 for compensation_exception in e.compensations:
@@ -174,7 +179,7 @@ class CreateOrderSaga:
         # In case task handler throws exception,
         #   Celery automatically raises exception here by itself
         #   and saga library automatically launches compensations
-        task_result.get()
+        task_result.get(timeout=self.TIMEOUT)
 
     def reject_order(self):
         self.order.update(status=OrderStatuses.REJECTED)
@@ -208,7 +213,7 @@ class CreateOrderSaga:
         # In case task handler throws exception,
         #   Celery automatically raises exception here by itself,
         #   and saga library automatically launches compensations
-        response = create_ticket_message.Response(**task_result.get())
+        response = create_ticket_message.Response(**task_result.get(timeout=self.TIMEOUT))
         logging.info(f'Restaurant ticket # {response.ticket_id} created')
         self.order.update(restaurant_ticket_id=response.ticket_id)
 
@@ -226,7 +231,7 @@ class CreateOrderSaga:
         self.saga_state.update(status=CreateOrderSagaStatuses.REJECTING_RESTAURANT_TICKET,
                                last_message_id=task_result.id)
 
-        task_result.get()
+        task_result.get(timeout=self.TIMEOUT)
         logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} rejected')
 
     def approve_restaurant_ticket(self):
@@ -243,7 +248,7 @@ class CreateOrderSaga:
         self.saga_state.update(status=CreateOrderSagaStatuses.APPROVING_RESTAURANT_TICKET,
                                last_message_id=task_result.id)
 
-        task_result.get()
+        task_result.get(timeout=self.TIMEOUT)
         logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} approved')
 
     def authorize_card(self):
@@ -263,7 +268,7 @@ class CreateOrderSaga:
         # In case task handler throws exception,
         #   Celery automatically raises exception here by itself,
         #   and saga library automatically launches compensations
-        response = authorize_card_message.Response(**task_result.get())
+        response = authorize_card_message.Response(**task_result.get(timeout=self.TIMEOUT))
         logging.info(f'Card authorized. Transaction ID: {response.transaction_id}')
         self.order.update(transaction_id=response.transaction_id)
 

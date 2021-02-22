@@ -1,4 +1,6 @@
 import logging
+import random
+import time
 
 from celery import Celery
 
@@ -19,6 +21,8 @@ command_handlers_celery_app.conf.task_default_queue = consumer_service_messaging
 @command_handlers_celery_app.task(name=verify_consumer_details_message.TASK_NAME)
 def verify_consumer_details_task(payload: dict):
     payload = verify_consumer_details_message.Payload(**payload)
+
+    time.sleep(random.choice([1, 1, 1, 1, 5]))  # emulate delay
 
     if payload.consumer_id < 50:
         raise ValueError(f'Consumer has incorrect id = {payload.consumer_id}')
