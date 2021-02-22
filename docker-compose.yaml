@@ -1,10 +1,26 @@
-rabbit:
-  image: "rabbitmq:3-management"
-  hostname: "rabbit1"
-  environment:
-    RABBITMQ_DEFAULT_USER: "rabbitmq"
-    RABBITMQ_DEFAULT_PASS: "rabbitmq"
-    RABBITMQ_DEFAULT_VHOST: "/"
-  ports:
-    - "15672:15672"
-    - "5672:5672"
+version: "3.3"
+services:
+  order_service:
+    build:
+      dockerfile: ./order_service/Dockerfile
+      context: .
+    command: flask run --host 0.0.0.0 --port 5000
+    ports:
+      - "5001:5000"
+    environment:
+      - PYTHONPATH=.
+      - FLASK_DEBUG=1
+      - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+    depends_on:
+      - rabbit
+    volumes:
+      - ./order_service/order_service:/code/order_service
+  rabbit:
+    image: "rabbitmq:3-management"
+    environment:
+      RABBITMQ_DEFAULT_USER: "rabbitmq"
+      RABBITMQ_DEFAULT_PASS: "rabbitmq"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "15672:15672"
+      - "5672:5672"

@@ -14,7 +14,7 @@ from flask_sqlalchemy import SQLAlchemy
 from saga import SagaBuilder, SagaError
 from sqlalchemy_mixins import AllFeaturesMixin
 
-from app_common import settings
+from order_service.app_common import settings
 from order_service.app_common.messaging.accounting_service_messaging import \
     authorize_card_message
 from order_service.app_common.messaging.consumer_service_messaging import \
@@ -95,7 +95,12 @@ BaseModel.set_session(db.session)
 db.create_all()  # "run migrations"
 
 
-@app.route('/create-order/timeout')
+@app.route('/ping')
+def ping():
+    return 'ping response'
+
+
+@app.route('/')
 def create_order():
     input_data = dict(
         consumer_id=random.randint(1, 100),
@@ -116,8 +121,12 @@ def create_order():
     order = Order.create(**input_data)
 
     # TODO: execute in a separate Celery task
-    CreateOrderSaga(order).execute()
-    return 'ok'
+    try:
+        CreateOrderSaga(order).execute()
+    except SagaError as e:
+        return f'Saga failed: {e} \n . See logs for more details'
+
+    return 'Saga succeeded'
 
 
 class CreateOrderSaga:
@@ -160,6 +169,7 @@ class CreateOrderSaga:
                           f'{traceback.format_exc()}\n'
                           f'===========\n')
             logging.error('Closing saga')
+            raise
 
             # in real world, we would also report this error somewhere
 
