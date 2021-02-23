@@ -143,9 +143,6 @@ class CreateOrderSaga:
             .action(self.approve_restaurant_ticket, self.NO_ACTION) \
             .action(self.approve_order, self.NO_ACTION) \
             .build()
-        # .action(self.restaurant_create_order, self.restaurant_reject_order) \
-        # .action(self.accounting_authorize_card, lambda _: _) \
-        # .action(self.approve_order, lambda _: _) \
 
         self.order = order
 
@@ -169,18 +166,17 @@ class CreateOrderSaga:
                           f'{traceback.format_exc()}\n'
                           f'===========\n')
             logging.error('Closing saga')
+            # in real world, we would also report this error somewhere
             raise
 
-            # in real world, we would also report this error somewhere
-
     def verify_consumer_details(self):
+        logging.info(f'Verifying consumer #{self.order.consumer_id} ...')
         task_result = celery_app.send_task(
             verify_consumer_details_message.TASK_NAME,
             args=[asdict(
                 verify_consumer_details_message.Payload(consumer_id=self.order.consumer_id)
             )],
             queue=consumer_service_messaging.COMMANDS_QUEUE)
-        logging.info(f'Verify consumer command sent (consumer id = {self.order.consumer_id})')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
                                last_message_id=task_result.id)
@@ -189,7 +185,8 @@ class CreateOrderSaga:
         # In case task handler throws exception,
         #   Celery automatically raises exception here by itself
         #   and saga library automatically launches compensations
-        task_result.get(timeout=self.TIMEOUT)
+        result = task_result.get(timeout=self.TIMEOUT)
+        logging.info(f'result = {result}')
         logging.info(f'Consumer #{self.order.consumer_id} verified')
 
     def reject_order(self):
@@ -199,6 +196,7 @@ class CreateOrderSaga:
         logging.info(f'Compensation: order {self.order.id} rejected')
 
     def create_restaurant_ticket(self):
+        logging.info('Sending "create restaurant ticket" command ...')
         task_result = celery_app.send_task(
             create_ticket_message.TASK_NAME,
             args=[asdict(
@@ -215,7 +213,6 @@ class CreateOrderSaga:
                 )
             )],
             queue=restaurant_service_messaging.COMMANDS_QUEUE)
-        logging.info('Create restaurant ticket command sent')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
                                last_message_id=task_result.id)
@@ -229,6 +226,7 @@ class CreateOrderSaga:
         self.order.update(restaurant_ticket_id=response.ticket_id)
 
     def reject_restaurant_ticket(self):
+        logging.info(f'Compensation: rejecting restaurant ticket #{self.order.restaurant_ticket_id} ...')
         task_result = celery_app.send_task(
             reject_ticket_message.TASK_NAME,
             args=[asdict(
@@ -237,7 +235,6 @@ class CreateOrderSaga:
                 )
             )],
             queue=restaurant_service_messaging.COMMANDS_QUEUE)
-        logging.info(f'Compensation: rejecting restaurant ticket #{self.order.restaurant_ticket_id}')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.REJECTING_RESTAURANT_TICKET,
                                last_message_id=task_result.id)
@@ -246,6 +243,7 @@ class CreateOrderSaga:
         logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} rejected')
 
     def approve_restaurant_ticket(self):
+        logging.info(f'Approving restaurant ticket #{self.order.restaurant_ticket_id} ...')
         task_result = celery_app.send_task(
             approve_ticket_message.TASK_NAME,
             args=[asdict(
@@ -254,7 +252,6 @@ class CreateOrderSaga:
                 )
             )],
             queue=restaurant_service_messaging.COMMANDS_QUEUE)
-        logging.info(f'Approving restaurant ticket #{self.order.restaurant_ticket_id}')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.APPROVING_RESTAURANT_TICKET,
                                last_message_id=task_result.id)
@@ -263,6 +260,7 @@ class CreateOrderSaga:
         logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} approved')
 
     def authorize_card(self):
+        logging.info(f'Authorizing card (amount={self.order.price}) ...')
         task_result = celery_app.send_task(
             authorize_card_message.TASK_NAME,
             args=[asdict(
@@ -270,7 +268,6 @@ class CreateOrderSaga:
                                                amount=self.order.price)
             )],
             queue=accounting_service_messaging.COMMANDS_QUEUE)
-        logging.info(f'Authorize card command sent (amount={self.order.price})')
 
         self.saga_state.update(status=CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD,
                                last_message_id=task_result.id)

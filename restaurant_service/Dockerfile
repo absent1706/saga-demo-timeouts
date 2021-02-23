@@ -9,7 +9,7 @@ RUN pip3 install pipenv
 WORKDIR /code
 
 # copy the dependencies file to the working directory
-COPY ./consumer_service/Pipfile* ./
+COPY ./restaurant_service/Pipfile* ./
 
 # install dependencies
 RUN pipenv install --dev --system --deploy --ignore-pipfile
@@ -17,9 +17,9 @@ RUN pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
 RUN pip install redis
 
 # copy the content of the local src directory to the working directory
-COPY ./consumer_service/consumer_service consumer_service
-COPY ./app_common consumer_service/app_common
+COPY ./restaurant_service/restaurant_service restaurant_service
+COPY ./app_common restaurant_service/app_common
 
 # command to run on container start
 ENV PYTHONPATH=.
-CMD ["celery", "-A", "consumer_service.worker", "worker", "--loglevel=INFO"]
+CMD ["celery", "-A", "restaurant_service.worker", "worker", "--loglevel=INFO"]

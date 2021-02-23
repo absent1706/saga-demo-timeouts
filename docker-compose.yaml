@@ -9,32 +9,57 @@ services:
     ports:
       - "15672:15672"
       - "5672:5672"
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
   order_service:
     build:
       dockerfile: ./order_service/Dockerfile
       context: .
     command: flask run --host 0.0.0.0 --port 5000
     ports:
-      - "5001:5000"
+      - "5000:5000"
     environment:
       - PYTHONPATH=.
       - FLASK_DEBUG=1
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - rabbit
+      - redis
     volumes:
       - ./order_service/order_service:/code/order_service
-  consumer_service:
+  consumer_service_worker:
     build:
       dockerfile: ./consumer_service/Dockerfile
       context: .
-#    command: flask run --host 0.0.0.0 --port 5000
-#    ports:
-#      - "5001:5000"
     environment:
       - PYTHONPATH=.
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - rabbit
-    volumes:
-      - ./consumer_service/consumer_service:/code/consumer_service
+      - redis
+  restaurant_service_worker:
+    build:
+      dockerfile: ./restaurant_service/Dockerfile
+      context: .
+    environment:
+      - PYTHONPATH=.
+      - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - rabbit
+      - redis
+  accounting_service_worker:
+    build:
+      dockerfile: ./accounting_service/Dockerfile
+      context: .
+    environment:
+      - PYTHONPATH=.
+      - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - rabbit
+      - redis

@@ -3,6 +3,7 @@
 pipenv install
 pipenv run pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
 pipenv run pip install mimesis
+pipenv run pip install redis
 ```
 
 # Run
