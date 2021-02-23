@@ -131,7 +131,7 @@ def create_order():
 
 class CreateOrderSaga:
     NO_ACTION = lambda *args: None
-    TIMEOUT = 2  # wait for result for this amount of seconds,
+    TIMEOUT = 5  # wait for result for this amount of seconds,
                  # then Celery will raise TimeoutError
 
     def __init__(self, order):
@@ -190,6 +190,7 @@ class CreateOrderSaga:
         #   Celery automatically raises exception here by itself
         #   and saga library automatically launches compensations
         task_result.get(timeout=self.TIMEOUT)
+        logging.info(f'Consumer #{self.order.consumer_id} verified')
 
     def reject_order(self):
         self.order.update(status=OrderStatuses.REJECTED)

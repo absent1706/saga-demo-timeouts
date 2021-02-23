@@ -1,5 +1,14 @@
 version: "3.3"
 services:
+  rabbit:
+    image: "rabbitmq:3-management"
+    environment:
+      RABBITMQ_DEFAULT_USER: "rabbitmq"
+      RABBITMQ_DEFAULT_PASS: "rabbitmq"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
   order_service:
     build:
       dockerfile: ./order_service/Dockerfile
@@ -15,12 +24,17 @@ services:
       - rabbit
     volumes:
       - ./order_service/order_service:/code/order_service
-  rabbit:
-    image: "rabbitmq:3-management"
+  consumer_service:
+    build:
+      dockerfile: ./consumer_service/Dockerfile
+      context: .
+#    command: flask run --host 0.0.0.0 --port 5000
+#    ports:
+#      - "5001:5000"
     environment:
-      RABBITMQ_DEFAULT_USER: "rabbitmq"
-      RABBITMQ_DEFAULT_PASS: "rabbitmq"
-      RABBITMQ_DEFAULT_VHOST: "/"
-    ports:
-      - "15672:15672"
-      - "5672:5672"
+      - PYTHONPATH=.
+      - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+    depends_on:
+      - rabbit
+    volumes:
+      - ./consumer_service/consumer_service:/code/consumer_service
