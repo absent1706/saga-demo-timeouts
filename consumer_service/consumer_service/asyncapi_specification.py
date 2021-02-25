@@ -20,3 +20,10 @@ spec = asyncapi.Specification(
     ])),
     servers=fake_asyncapi_servers,
 )
+
+
+if __name__ == '__main__':
+    import yaml
+    from asyncapi.docs import spec_asjson
+
+    print(yaml.dump(spec_asjson(spec)))
