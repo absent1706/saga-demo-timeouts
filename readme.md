@@ -38,7 +38,7 @@ which generates specs using [asyncapi-python](https://github.com/dutradda/asynca
 
 [asyncapi-python](https://github.com/dutradda/asyncapi-python) library is also used for describing message schemas 
 using dataclasses. 
-For example, `create_ticket_message.py` file looks like
+For example, [`create_ticket_message.py`](app_common/messaging/restaurant_service_messaging/create_ticket_message.py) file looks like
 ```python
 import dataclasses
 from typing import List
@@ -85,7 +85,7 @@ response = asyncapi.Message(
 )
 ```
 
-These schemas are used to generate AsyncAPI specification, e.g.,
+These schemas are used to generate AsyncAPI specification, e.g., (see [restaurant_service/restaurant_service/asyncapi_specification.py](restaurant_service/restaurant_service/asyncapi_specification.py))
 ```python
 spec = asyncapi.Specification(
     info=asyncapi.Info(
