@@ -8,6 +8,7 @@ from order_service.app_common.messaging import consumer_service_messaging, resta
 from order_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
+from order_service.app_common.messaging.asyncapi_utils import fake_asyncapi_servers
 
 spec = asyncapi.Specification(
     info=asyncapi.Info(
@@ -42,9 +43,5 @@ spec = asyncapi.Specification(
         message_to_component(authorize_card_message.message),
         message_to_component(approve_ticket_message.message)
     ])),
-    servers={'development': asyncapi.Server(
-        url='localhost',
-        protocol=asyncapi.ProtocolType.REDIS,
-        description='Development Broker Server',
-    )},
+    servers=fake_asyncapi_servers,
 )

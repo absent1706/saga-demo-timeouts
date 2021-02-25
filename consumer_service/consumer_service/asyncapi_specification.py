@@ -1,6 +1,7 @@
 import asyncapi
 
 from consumer_service.app_common.messaging import consumer_service_messaging
+from consumer_service.app_common.messaging.asyncapi_utils import fake_asyncapi_servers
 from consumer_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from consumer_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
@@ -17,9 +18,5 @@ spec = asyncapi.Specification(
     components=asyncapi.Components(messages=dict([
         message_to_component(verify_consumer_details_message.message)
     ])),
-    servers={'development': asyncapi.Server(
-        url='localhost',
-        protocol=asyncapi.ProtocolType.REDIS,
-        description='Development Broker Server',
-    )},
+    servers=fake_asyncapi_servers,
 )

@@ -1,6 +1,6 @@
 import asyncapi
 
-from accounting_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
+from accounting_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component, fake_asyncapi_servers
 from accounting_service.app_common.messaging.accounting_service_messaging import authorize_card_message
 from accounting_service.app_common.messaging import accounting_service_messaging
 
@@ -18,9 +18,5 @@ spec = asyncapi.Specification(
         message_to_component(authorize_card_message.message),
         message_to_component(authorize_card_message.response)
     ])),
-    servers={'development': asyncapi.Server(
-        url='localhost',
-        protocol=asyncapi.ProtocolType.REDIS,
-        description='Development Broker Server',
-    )},
+    servers=fake_asyncapi_servers,
 )
