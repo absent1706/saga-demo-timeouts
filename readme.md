@@ -13,7 +13,7 @@ Firstly, run all infrastructure
 ```
 docker-compose up --build --remove-orphans
 ```
-Then, try out visiting http://localhost:5001 in your browser or just
+Then, try out visiting http://localhost:5000 in your browser or just
 
 ```
 curl localhost:5000
