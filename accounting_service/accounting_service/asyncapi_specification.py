@@ -1,6 +1,6 @@
 import asyncapi
 
-from accounting_service.app_common.messaging.utils import message_to_channel, message_to_component
+from accounting_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
 from accounting_service.app_common.messaging.accounting_service_messaging import authorize_card_message
 from accounting_service.app_common.messaging import accounting_service_messaging
 

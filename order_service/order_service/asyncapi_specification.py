@@ -5,7 +5,7 @@ from order_service.app_common.messaging.accounting_service_messaging import \
 from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from order_service.app_common.messaging import consumer_service_messaging, restaurant_service_messaging, accounting_service_messaging
-from order_service.app_common.messaging.utils import message_to_channel, message_to_component
+from order_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
 

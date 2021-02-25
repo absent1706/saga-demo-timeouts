@@ -3,7 +3,7 @@ import asyncapi
 from consumer_service.app_common.messaging import consumer_service_messaging
 from consumer_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
-from consumer_service.app_common.messaging.utils import message_to_channel, message_to_component
+from consumer_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
 
 spec = asyncapi.Specification(
     info=asyncapi.Info(

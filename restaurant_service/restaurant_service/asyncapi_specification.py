@@ -1,7 +1,7 @@
 import asyncapi
 
 from restaurant_service.app_common.messaging import restaurant_service_messaging
-from restaurant_service.app_common.messaging.utils import message_to_channel, message_to_component
+from restaurant_service.app_common.messaging.asyncapi_utils import message_to_channel, message_to_component
 from restaurant_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
 
