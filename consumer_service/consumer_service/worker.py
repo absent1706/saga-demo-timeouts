@@ -22,11 +22,12 @@ command_handlers_celery_app.conf.task_default_queue = consumer_service_messaging
 def verify_consumer_details_task(payload: dict):
     payload = verify_consumer_details_message.Payload(**payload)
 
-    # emulate 7 seconds delay in 20% cases
-    if random.random() < 0.2:
-        time.sleep(7)
-
+    # emulate an error if consumer_id is less than 50
     if payload.consumer_id < 50:
         raise ValueError(f'Consumer has incorrect id = {payload.consumer_id}')
+
+    # emulate 7 seconds delay if consumer_id is between 50 and 59
+    if 50 <= payload.consumer_id < 60:
+        time.sleep(7)
 
     return None

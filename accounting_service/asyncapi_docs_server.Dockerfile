@@ -1,8 +1,9 @@
-FROM sagas_accounting_service_worker:latest
+FROM app_accounting_service_worker:latest
 
 ### Install NodeJS begin
 ENV NODE_VERSION=12.6.0
-RUN apt install -y curl
+RUN apt-get update
+RUN apt-get install -y curl
 RUN curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.34.0/install.sh | bash
 ENV NVM_DIR=/root/.nvm
 RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
@@ -13,6 +14,8 @@ RUN node --version
 RUN npm --version
 ### Install NodeJS end
 
+# need to install git to make "ag" command work
+RUN apt-get install -y git
 
 RUN npm install -g @asyncapi/generator
 RUN npm install -g http-server

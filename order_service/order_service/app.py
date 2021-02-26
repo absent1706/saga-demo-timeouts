@@ -100,24 +100,30 @@ def ping():
     return 'ping response'
 
 
-@app.route('/')
-def create_order():
-    input_data = dict(
-        consumer_id=random.randint(1, 100),
-        price=random.randint(10, 100),
-        card_id=random.randint(1, 5),
-        items=[
-            OrderItem(
-               name=mimesis.Food().dish(),  # some fake dish name
-               quantity=random.randint(1, 5)
-            ),
-            OrderItem(
-                name=mimesis.Food().dish(),  # some fake dish name
-                quantity=random.randint(1, 5)
-            )
-        ]
-    )
+BASE_INPUT_DATA = dict(
+    items=[
+        OrderItem(
+           name=mimesis.Food().dish(),  # some fake dish name
+           quantity=random.randint(1, 5)
+        ),
+        OrderItem(
+            name=mimesis.Food().dish(),  # some fake dish name
+            quantity=random.randint(1, 5)
+        )
+    ]
+)
 
+# magic numbers that make consumer_service succeed or fail
+CONSUMER_ID_THAT_WILL_SUCCEED = 70
+CONSUMER_ID_THAT_WILL_FAIL = 10
+CONSUMER_ID_THAT_WILL_FAIL_BECAUSE_OF_TIMEOUT = 55
+
+# magic numbers that make accounting_service succeed or fail
+PRICE_THAT_WILL_SUCCEED = 20
+PRICE_THAT_WILL_FAIL = 80
+
+
+def _run_saga(input_data):
     order = Order.create(**input_data)
 
     # TODO: execute in a separate Celery task
@@ -127,6 +133,75 @@ def create_order():
         return f'Saga failed: {e} \n . See logs for more details'
 
     return 'Saga succeeded'
+
+
+@app.route('/')
+def welcome_page():
+    return '''
+    Welcome to saga orchestration demo!
+    You can use next endpoints to start Order Create saga:
+    <ul>
+      <li><a href="/run-random-saga">/run-random-saga</a></li>
+      <li><a href="/run-success-saga">/run-success-saga</a></li>
+      <li><a href="/run-saga-failing-on-consumer-verification-because-of-incorrect-id">/run-saga-failing-on-consumer-verification-because-of-incorrect-id</a></li>
+      <li><a href="/run-saga-failing-on-consumer-verification-because-of-timeout">/run-saga-failing-on-consumer-verification-because-of-timeout</a></li>
+      <li><a href="/run-saga-failing-on-card-authorization">/run-saga-failing-on-card-authorization</a></li>
+    </ul>
+    '''
+
+
+@app.route('/run-random-saga')
+def run_random_saga():
+    # it will randomly pass or fail
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=random.randint(1, 100),
+        price=random.randint(10, 100),
+        card_id=random.randint(1, 5)
+    ))
+
+
+@app.route('/run-success-saga')
+def run_success_saga():
+    # it should succeed
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
+        price=PRICE_THAT_WILL_SUCCEED,
+        card_id=random.randint(1, 5)
+    ))
+
+
+@app.route('/run-saga-failing-on-consumer-verification-because-of-incorrect-id')
+def run_saga_failing_on_consumer_verification_incorrect_id():
+    # it should fail on consumer verification stage
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_FAIL,
+        price=PRICE_THAT_WILL_SUCCEED,
+        card_id=random.randint(1, 5)
+    ))
+
+
+@app.route('/run-saga-failing-on-consumer-verification-because-of-timeout')
+def run_saga_failing_on_consumer_verification_timeout():
+    # it should fail on consumer verification stage
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_FAIL_BECAUSE_OF_TIMEOUT,
+        price=PRICE_THAT_WILL_SUCCEED,
+        card_id=random.randint(1, 5)
+    ))
+
+@app.route('/run-saga-failing-on-card-authorization')
+def run_saga_failing_on_card_authorization():
+    # it should fail on card authorization stage
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
+        price=PRICE_THAT_WILL_FAIL,
+        card_id=random.randint(1, 5)
+    ))
 
 
 class CreateOrderSaga:
@@ -150,10 +225,12 @@ class CreateOrderSaga:
 
     def execute(self):
         try:
+            logging.info(f'Starting order create saga #{self.saga_state.id}')
             result = self.saga.execute()
+            logging.error(f'Saga #{self.saga_state.id} suceeded')
             return result
         except SagaError as e:
-            logging.error(f'Saga error occured: {e} \n')
+            logging.error(f'Saga #{self.saga_state.id} failed: {e} \n')
             if isinstance(e.action, CeleryTimeoutError):
                 logging.error(f'Timeout happened\n')
             if e.compensations:

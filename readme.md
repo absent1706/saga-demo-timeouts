@@ -15,10 +15,7 @@ docker-compose up --build --remove-orphans
 ```
 
 Then, you can visit next URLs:
- * http://localhost:5000 - to run OrderCreateSaga. 
-   Note that it generates random order, so saga will fail at different steps (so you may see how compensations run),
-    only around 20% of times it will succeed.
-   That should create a great feeling of how it will run in a real world
+ * http://localhost:5000 - homepage with all links to run sagas.
  * http://localhost:8081 - AsyncAPI docs for `order_service`
  * http://localhost:8082 - AsyncAPI docs for `consumer_service`
  * http://localhost:8083 - AsyncAPI docs for `restaurant_service`

@@ -14,6 +14,7 @@ services:
     ports:
       - "6379:6379"
   order_service:
+    image: app_order_service
     build:
       context: .
       dockerfile: order_service/Dockerfile
@@ -33,6 +34,7 @@ services:
     volumes:
       - ./order_service/order_service:/code/order_service
   order_service_asyncapi_docs_server:
+    image: app_order_service_asyncapi_docs_server
     build:
       context: ./order_service
       dockerfile: asyncapi_docs_server.Dockerfile
@@ -40,6 +42,7 @@ services:
     ports:
       - "8081:8080"
   consumer_service_worker:
+    image: app_consumer_service_worker
     build:
       context: .
       dockerfile: consumer_service/Dockerfile
@@ -53,6 +56,7 @@ services:
       - rabbit
       - redis
   consumer_service_asyncapi_docs_server:
+    image: app_consumer_service_asyncapi_docs_server
     build:
       context: ./consumer_service
       dockerfile: asyncapi_docs_server.Dockerfile
@@ -60,6 +64,7 @@ services:
     ports:
       - "8082:8080"
   restaurant_service_worker:
+    image: app_restaurant_service_worker
     build:
       context: .
       dockerfile: restaurant_service/Dockerfile
@@ -73,6 +78,7 @@ services:
       - rabbit
       - redis
   restaurant_service_asyncapi_docs_server:
+    image: app_restaurant_service_asyncapi_docs_server
     build:
       context: ./restaurant_service
       dockerfile: asyncapi_docs_server.Dockerfile
@@ -80,6 +86,7 @@ services:
     ports:
       - "8083:8080"
   accounting_service_worker:
+    image: app_accounting_service_worker
     build:
       context: .
       dockerfile: accounting_service/Dockerfile
@@ -93,6 +100,7 @@ services:
       - rabbit
       - redis
   accounting_service_asyncapi_docs_server:
+    image: app_accounting_service_asyncapi_docs_server
     build:
       context: ./accounting_service
       dockerfile: asyncapi_docs_server.Dockerfile
