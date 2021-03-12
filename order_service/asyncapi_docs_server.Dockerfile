@@ -25,7 +25,7 @@ RUN pip install pyyaml
 RUN PYTHONPATH=. python order_service/asyncapi_specification.py > asyncapi.yaml
 
 # generate HTML
-#RUN ag asyncapi.yaml @asyncapi/html-template -o ./asyncapi_html
+RUN ag asyncapi.yaml @asyncapi/html-template -o ./asyncapi_html
 
 # run server
 CMD ["http-server /code/asyncapi_html"]

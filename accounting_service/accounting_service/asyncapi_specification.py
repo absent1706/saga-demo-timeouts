@@ -6,7 +6,7 @@ from accounting_service.app_common.messaging import accounting_service_messaging
 
 spec = asyncapi.Specification(
     info=asyncapi.Info(
-        title='Consumer service', version='1.0.0',
+        title='Accounting service', version='1.0.0',
         description=f'Takes command messages from "{accounting_service_messaging.COMMANDS_QUEUE}" queue',
     ),
     channels=dict([
